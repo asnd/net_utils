@@ -3,7 +3,7 @@ import time
 import dns.resolver
 import collections
 
-dns_list = ["1.1.1.1", "8.8.8.8","8.26.56.26", "192.168.50.12","9.9.9.9","64.6.65.6","91.239.100.100","77.88.8.7","156.154.70.1","198.101.242.72","176.103.130.130"] #,"192.168.50.12"]
+dns_list = ["1.1.1.1", "8.8.8.8","8.26.56.26", "9.9.9.9","64.6.65.6","91.239.100.100","77.88.8.7","156.154.70.1","198.101.242.72","176.103.130.130"] #,"192.168.50.12"]
 test_fqdn = ['google.se', 'fb.com', 'amazon.de','meta.ua', 'mail.ru', 'web.de',"svd.se","ica.se"]
 
 
@@ -11,10 +11,11 @@ test_fqdn = ['google.se', 'fb.com', 'amazon.de','meta.ua', 'mail.ru', 'web.de',"
 #t = timeit.timeit(dns.resolver.query('tutorialspoint.com', 'A'), 10)
 
 mr = dns.resolver.Resolver()
+for s in  mr.nameservers : 
+   dns_list.append(s)
 
 
-
-def get_dns_time(dns_list,repeat=10, fqdn="svd.se", query_type='A'):
+def get_dns_time(dns_list,repeat=3, fqdn="svd.se", query_type='A'):
    d = {}
    # mr = dns.resolver.Resolver()
    r = []
