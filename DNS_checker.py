@@ -2,58 +2,41 @@ import timeit
 import time
 import dns.resolver
 import collections
+import concurrent.futures
 
-dns_list = ["1.1.1.1", "8.8.8.8","8.26.56.26", "9.9.9.9","64.6.65.6","91.239.100.100","77.88.8.7","156.154.70.1","198.101.242.72","176.103.130.130"] #,"192.168.50.12"]
-test_fqdn = ['google.se', 'fb.com', 'amazon.de','meta.ua', 'mail.ru', 'web.de',"svd.se","ica.se"]
-
-
-
-#t = timeit.timeit(dns.resolver.query('tutorialspoint.com', 'A'), 10)
+dns_list = ["1.1.1.1", "8.8.8.8", "8.26.56.26", "9.9.9.9", "64.6.65.6", "91.239.100.100", "77.88.8.7", "156.154.70.1", "198.101.242.72", "176.103.130.130"]
+test_fqdn = ['google.se', 'fb.com', 'amazon.de', 'meta.ua', 'mail.ru', 'web.de', "svd.se", "ica.se"]
 
 mr = dns.resolver.Resolver()
-for s in  mr.nameservers : 
-   dns_list.append(s)
+for s in mr.nameservers:
+    dns_list.append(s)
 
+def get_dns_time(dns_server, repeat=3, fqdn_list=test_fqdn, query_type='A'):
+    mr = dns.resolver.Resolver()
+    mr.nameservers = [dns_server]
+    start = time.time()
+    for _ in range(repeat):
+        for fqdn in fqdn_list:
+            try:
+                mr.query(fqdn, query_type)
+            except dns.exception.DNSException:
+                pass
+        mr.cache = ''
+    end = time.time()
+    return end - start
 
-def get_dns_time(dns_list,repeat=3, fqdn="svd.se", query_type='A'):
-   d = {}
-   # mr = dns.resolver.Resolver()
-   r = []
-   for l in dns_list:
-     mr= dns.resolver.Resolver()
-     mr.nameservers = [l]  
-     start = time.time()
-     for i in range(repeat):
-       for f in test_fqdn:
-          r=mr.query(f, query_type)
-       mr.cache =  '' 
-     print(r.rrset, mr.nameservers)
-     end = time.time()
-     d[l] =  end-start
-   return d
+def test_dns(dns_list, repeat=1000, query_type='A'):
+    results = {}
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = [executor.submit(get_dns_time, dns_server, repeat, test_fqdn, query_type) for dns_server in dns_list]
+        for dns_server, future in zip(dns_list, futures):
+            results[dns_server] = future.result()
+    return results
 
+def print_results(results):
+    sorted_results = sorted(results.items(), key=lambda item: item[1])
+    for dns_server, time_taken in sorted_results:
+        print(f"{dns_server}: {round(time_taken, 4)}")
 
-def test_dns(dnss, repeat=1000, query_type='A'):
-    t = ()
-    for  d in dnss: 
-      t =   get_dns_time(d,repeat = repeat,query_type=query_type) 
-      print (d,t)
-      t = ()
-
-#get_dns_time(dns_list[0])
-
-d= get_dns_time(dns_list)
-
-for key, value in sorted(d.items(), key=lambda item: item[1]):
-    print("%s: %s" % (key, round(value,4)))
-
-#for k,v in d.items(): 
-#    print(k,round(v,5))
-
-
-
-def run_dns_query(ip):
-    try:
-        dns.resolver.query()
-    except expression as identifier:
-        pass
+results = test_dns(dns_list)
+print_results(results)
