@@ -1,7 +1,5 @@
-import timeit
 import time
 import dns.resolver
-import collections
 import concurrent.futures
 
 dns_list = ["1.1.1.1", "8.8.8.8", "8.26.56.26", "9.9.9.9", "64.6.65.6", "91.239.100.100", "77.88.8.7", "156.154.70.1", "198.101.242.72", "176.103.130.130"]
@@ -38,5 +36,12 @@ def print_results(results):
     for dns_server, time_taken in sorted_results:
         print(f"{dns_server}: {round(time_taken, 4)}")
 
-results = test_dns(dns_list)
-print_results(results)
+def main():
+    repeat = 1000
+    query_type = 'A'
+    results = test_dns(dns_list, repeat, query_type)
+    print(f"DNS Query Test Results (Repeat: {repeat}, Query Type: {query_type})")
+    print_results(results)
+
+if __name__ == "__main__":
+    main()
