@@ -113,4 +113,35 @@ func stripUntilSecondEthernet(inputFile, outputFile string) error {
 
 func main() {
     if len(os.Args) < 2 {
-        log.Fatal("Please provide the input PCAP f
+        log.Fatal("Please provide the input PCAP file as an argument")
+    }
+
+    inputFile := os.Args[1]
+    outputFile := "output.pcap"
+
+    fmt.Println("Select an option:")
+    fmt.Println("1. Strip X bytes from each packet")
+    fmt.Println("2. Strip outer headers until the second Ethernet header for all packets")
+
+    var choice string
+    fmt.Print("Enter your choice (1 or 2): ")
+    fmt.Scanln(&choice)
+
+    var err error
+
+    switch choice {
+    case "1":
+        var numBytes int
+        fmt.Print("Enter the number of bytes to strip from each packet: ")
+        fmt.Scanln(&numBytes)
+        err = stripBytesFromPackets(inputFile, outputFile, numBytes)
+    case "2":
+        err = stripUntilSecondEthernet(inputFile, outputFile)
+    default:
+        log.Fatal("Invalid choice. Exiting.")
+    }
+
+    if err != nil {
+        log.Fatal(err)
+    }
+}
