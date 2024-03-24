@@ -145,7 +145,8 @@ func stripUntilSecondEthernet(inputFile, outputFile string) error {
             if ethernetPacket.EthernetType == layers.EthernetTypeIPv4 {
                 ipLayer := packet.Layer(layers.LayerTypeIPv4)
                 if ipLayer != nil {
-                    strippedPacket := data[ipLayer.LayerContents().Offset():]
+                    ipPacket, _ := ipLayer.(*layers.IPv4)
+                    strippedPacket := data[ipPacket.Length:]
                     writer.WritePacket(ci, strippedPacket)
                     continue
                 }
