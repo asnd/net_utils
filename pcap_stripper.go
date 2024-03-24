@@ -11,7 +11,7 @@ import (
     "github.com/google/gopacket/pcapgo"
 )
 
-func stripUntilSecondEthernet(inputFile, outputFile string) error {
+func stripBytesFromBeginning(inputFile, outputFile string, numBytes int) error {
     // Open the input PCAP file
     input, err := os.Open(inputFile)
     if err != nil {
@@ -46,34 +46,17 @@ func stripUntilSecondEthernet(inputFile, outputFile string) error {
             return err
         }
 
-        packet := gopacket.NewPacket(data, layers.LayerTypeEthernet, gopacket.Default)
-        ethernetLayers := packet.Layers()
+        // Strip the specified number of bytes from the beginning of each packet
+        strippedPacket := data[numBytes:]
 
-        var secondEthernetOffset int
-        var foundSecondEthernet bool
-
-        for i := 0; i < len(ethernetLayers); i++ {
-            if ethernetLayer, ok := ethernetLayers[i].(*layers.Ethernet); ok {
-                if foundSecondEthernet {
-                    secondEthernetOffset = ethernetLayer.Contents[0] & 0xf
-                    break
-                }
-                foundSecondEthernet = true
-            }
-        }
-
-        if foundSecondEthernet {
-            // Strip the outer headers before the second Ethernet header
-            strippedPacket := data[secondEthernetOffset:]
-            writer.WritePacket(ci, strippedPacket)
-        } else {
-            writer.WritePacket(ci, data)
-        }
+        // Write the stripped packet to the output PCAP file
+        writer.WritePacket(ci, strippedPacket)
     }
 
-    fmt.Printf("Stripped outer headers until the second Ethernet header for all packets and saved to %s\n", outputFile)
+    fmt.Printf("Stripped %d bytes from the beginning of each packet and saved to %s\n", numBytes, outputFile)
     return nil
 }
+
 func stripBytesFromEnd(inputFile, outputFile string, numBytes int) error {
     // Open the input PCAP file
     input, err := os.Open(inputFile)
@@ -156,24 +139,25 @@ func stripUntilSecondEthernet(inputFile, outputFile string) error {
         }
 
         packet := gopacket.NewPacket(data, layers.LayerTypeEthernet, gopacket.Default)
-        ethernetLayers := packet.LayersByType(layers.LayerTypeEthernet)
-
-        if len(ethernetLayers) >= 2 {
-            // Find the offset of the second Ethernet header
-            secondEthernetOffset := ethernetLayers[1].(*layers.Ethernet).Contents[0] & 0xf
-
-            // Strip the outer headers before the second Ethernet header
-            strippedPacket := data[secondEthernetOffset:]
-            writer.WritePacket(ci, strippedPacket)
-        } else {
-            writer.WritePacket(ci, data)
+        ethernetLayer := packet.Layer(layers.LayerTypeEthernet)
+        if ethernetLayer != nil {
+            ethernetPacket, _ := ethernetLayer.(*layers.Ethernet)
+            if ethernetPacket.EthernetType == layers.EthernetTypeIPv4 {
+                ipLayer := packet.Layer(layers.LayerTypeIPv4)
+                if ipLayer != nil {
+                    strippedPacket := data[ipLayer.LayerContents().Offset():]
+                    writer.WritePacket(ci, strippedPacket)
+                    continue
+                }
+            }
         }
+
+        writer.WritePacket(ci, data)
     }
 
     fmt.Printf("Stripped outer headers until the second Ethernet header for all packets and saved to %s\n", outputFile)
     return nil
 }
-
 
 func filterPackets(inputFile, outputFile, displayFilter string) error {
     // Open the input PCAP file
