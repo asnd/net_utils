@@ -74,7 +74,7 @@ func printResults(results map[string]float64) {
 }
 
 func main() {
-    repeat := 1000
+    repeat := 3
     queryType := dns.TypeA
     results := testDNS(dnsList, repeat, queryType)
     fmt.Printf("DNS Query Test Results (Repeat: %d, Query Type: %d)\n", repeat, queryType)
