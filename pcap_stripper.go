@@ -2,118 +2,61 @@ package main
 
 import (
     "fmt"
-    "io/ioutil"
     "log"
     "os"
-    "strings"
 
     "github.com/google/gopacket"
     "github.com/google/gopacket/layers"
     "github.com/google/gopacket/pcapgo"
 )
 
-func stripBytesFromBeginning(inputFile, outputFile string, numBytes int) error {
-    // Open the input PCAP file
-    input, err := os.Open(inputFile)
-    if err != nil {
-        return err
-    }
-    defer input.Close()
 
-    // Create a new PCAP file reader
-    reader, err := pcapgo.NewReader(input)
-    if err != nil {
-        return err
-    }
-
-    // Create the output PCAP file
-    output, err := os.Create(outputFile)
-    if err != nil {
-        return err
-    }
-    defer output.Close()
-
-    // Create a new PCAP file writer
-    writer := pcapgo.NewWriter(output)
-    writer.WriteFileHeader(1024, layers.LinkTypeEthernet)
-
-    // Iterate over each packet in the input PCAP file
-    for {
-        data, ci, err := reader.ReadPacketData()
-        if err != nil {
-            if err.Error() == "EOF" {
-                break
-            }
-            return err
-        }
-
-        // Strip the specified number of bytes from the beginning of each packet
-        strippedPacket := data[numBytes:]
-
-        // Write the stripped packet to the output PCAP file
-        writer.WritePacket(ci, strippedPacket)
-    }
-
-    fmt.Printf("Stripped %d bytes from the beginning of each packet and saved to %s\n", numBytes, outputFile)
-    return nil
-}
-
-func stripBytesFromEnd(inputFile, outputFile string, numBytes int) error {
-    // Open the input PCAP file
-    input, err := os.Open(inputFile)
-    if err != nil {
-        return err
-    }
-    defer input.Close()
-
-    // Create a new PCAP file reader
-    reader, err := pcapgo.NewReader(input)
-    if err != nil {
-        return err
-    }
-
-    // Create the output PCAP file
-    output, err := os.Create(outputFile)
-    if err != nil {
-        return err
-    }
-    defer output.Close()
-
-    // Create a new PCAP file writer
-    writer := pcapgo.NewWriter(output)
-    writer.WriteFileHeader(1024, layers.LinkTypeEthernet)
-
-    // Iterate over each packet in the input PCAP file
-    for {
-        data, ci, err := reader.ReadPacketData()
-        if err != nil {
-            if err.Error() == "EOF" {
-                break
-            }
-            return err
-        }
-
-        // Strip the specified number of bytes from the end of each packet
-        strippedPacket := data[:len(data)-numBytes]
-
-        // Write the stripped packet to the output PCAP file
-        writer.WritePacket(ci, strippedPacket)
-    }
-
-    fmt.Printf("Stripped %d bytes from the end of each packet and saved to %s\n", numBytes, outputFile)
-    return nil
-}
-
-func stripUntilSecondEthernet(inputFile, outputFile string) error {
-    // ... (code remains unchanged)
-}
 
 func filterPackets(inputFile, outputFile, displayFilter string) error {
     // ... (code remains unchanged)
 }
 
 func matchFilter(packet gopacket.Packet, filter string) bool {
-    // ... (code remains unchanged)
+    // Implement the packet filtering logic based on the display filter
+    // This is a simplified example and may not cover all possible filter scenarios
+
+    // Split the filter into key-value pairs
+    pairs := strings.Split(filter, "&&")
+    for _, pair := range pairs {
+        kv := strings.Split(strings.TrimSpace(pair), "==")
+        if len(kv) != 2 {
+            continue
+        }
+        key := strings.TrimSpace(kv[0])
+        value := strings.TrimSpace(kv[1])
+
+        // Check if the packet matches the filter condition
+        switch key {
+        case "ip.src":
+            if ipLayer := packet.Layer(layers.LayerTypeIPv4); ipLayer != nil {
+                ip, _ := ipLayer.(*layers.IPv4)
+                if ip.SrcIP.String() != value {
+                    return false
+                }
+            } else {
+                return false
+            }
+        case "udp.port":
+            if udpLayer := packet.Layer(layers.LayerTypeUDP); udpLayer != nil {
+                udp, _ := udpLayer.(*layers.UDP)
+                if fmt.Sprintf("%d", udp.SrcPort) != value && fmt.Sprintf("%d", udp.DstPort) != value {
+                    return false
+                }
+            } else {
+                return false
+            }
+        // Add more filter conditions as needed
+        default:
+            return false
+        }
+    }
+
+    return true
 }
 
 func main() {
