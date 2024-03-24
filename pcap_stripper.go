@@ -174,6 +174,7 @@ func stripUntilSecondEthernet(inputFile, outputFile string) error {
     return nil
 }
 
+
 func filterPackets(inputFile, outputFile, displayFilter string) error {
     // Open the input PCAP file
     input, err := os.Open(inputFile)
