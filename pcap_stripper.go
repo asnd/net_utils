@@ -1,5 +1,6 @@
 package main
 
+
 import (
     "fmt"
     "log"
@@ -34,7 +35,7 @@ func stripBytesFromBeginning(inputFile, outputFile string, numBytes int) error {
 
     // Create a new PCAP file writer
     writer := pcapgo.NewWriter(output)
-    writer.WriteFileHeader(uint32(reader.LinkType()), reader.Snaplen())
+   writer.WriteFileHeader(^uint32(0), layers.LinkTypeEthernet)
 
 
     // Iterate over each packet in the input PCAP file
@@ -81,7 +82,7 @@ func stripBytesFromEnd(inputFile, outputFile string, numBytes int) error {
 
     // Create a new PCAP file writer
    writer := pcapgo.NewWriter(output)
-    writer.WriteFileHeader(uint32(reader.LinkType()), reader.Snaplen())
+   writer.WriteFileHeader(^uint32(0), layers.LinkTypeEthernet)
 
 
     // Iterate over each packet in the input PCAP file
@@ -128,7 +129,7 @@ func stripUntilSecondEthernet(inputFile, outputFile string) error {
 
     // Create a new PCAP file writer
     writer := pcapgo.NewWriter(output)
-    writer.WriteFileHeader(uint32(reader.LinkType()), reader.Snaplen())
+   writer.WriteFileHeader(^uint32(0), layers.LinkTypeEthernet)
 
 
     // Iterate over each packet in the input PCAP file
@@ -186,7 +187,7 @@ func filterPackets(inputFile, outputFile, displayFilter string) error {
 
     // Create a new PCAP file writer
     writer := pcapgo.NewWriter(output)
-    writer.WriteFileHeader(uint32(reader.LinkType()), reader.Snaplen())
+   writer.WriteFileHeader(^uint32(0), layers.LinkTypeEthernet)
 
 
     // Iterate over each packet in the input PCAP file
