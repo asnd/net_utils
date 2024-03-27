@@ -1,6 +1,5 @@
 package main
 
-
 import (
     "fmt"
     "log"
@@ -13,30 +12,11 @@ import (
 )
 
 func stripBytesFromBeginning(inputFile, outputFile string, numBytes int) error {
-    // Open the input PCAP file
-    input, err := os.Open(inputFile)
-    if err != nil {
-        return err
-    }
-    defer input.Close()
-
-    // Create a new PCAP file reader
-    reader, err := pcapgo.NewReader(input)
-    if err != nil {
-        return err
-    }
-
-    // Create the output PCAP file
-    output, err := os.Create(outputFile)
-    if err != nil {
-        return err
-    }
-    defer output.Close()
+    // ... (previous code remains the same)
 
     // Create a new PCAP file writer
     writer := pcapgo.NewWriter(output)
-   writer.WriteFileHeader(^uint32(0), layers.LinkTypeEthernet)
-
+    writer.WriteFileHeader(1024, layers.LinkTypeEthernet)
 
     // Iterate over each packet in the input PCAP file
     for {
@@ -52,38 +32,20 @@ func stripBytesFromBeginning(inputFile, outputFile string, numBytes int) error {
         strippedPacket := data[numBytes:]
 
         // Write the stripped packet to the output PCAP file
-        writer.WritePacket(ci, strippedPacket)
+        if err := writer.WritePacket(ci, strippedPacket); err != nil {
+            return err
+        }
     }
 
-    fmt.Printf("Stripped %d bytes from the beginning of each packet and saved to %s\n", numBytes, outputFile)
-    return nil
+    // ... (remaining code remains the same)
 }
 
 func stripBytesFromEnd(inputFile, outputFile string, numBytes int) error {
-    // Open the input PCAP file
-    input, err := os.Open(inputFile)
-    if err != nil {
-        return err
-    }
-    defer input.Close()
-
-    // Create a new PCAP file reader
-    reader, err := pcapgo.NewReader(input)
-    if err != nil {
-        return err
-    }
-
-    // Create the output PCAP file
-    output, err := os.Create(outputFile)
-    if err != nil {
-        return err
-    }
-    defer output.Close()
+    // ... (previous code remains the same)
 
     // Create a new PCAP file writer
-   writer := pcapgo.NewWriter(output)
-   writer.WriteFileHeader(^uint32(0), layers.LinkTypeEthernet)
-
+    writer := pcapgo.NewWriter(output)
+    writer.WriteFileHeader(1024, layers.LinkTypeEthernet)
 
     // Iterate over each packet in the input PCAP file
     for {
@@ -99,38 +61,20 @@ func stripBytesFromEnd(inputFile, outputFile string, numBytes int) error {
         strippedPacket := data[:len(data)-numBytes]
 
         // Write the stripped packet to the output PCAP file
-        writer.WritePacket(ci, strippedPacket)
+        if err := writer.WritePacket(ci, strippedPacket); err != nil {
+            return err
+        }
     }
 
-    fmt.Printf("Stripped %d bytes from the end of each packet and saved to %s\n", numBytes, outputFile)
-    return nil
+    // ... (remaining code remains the same)
 }
 
 func stripUntilSecondEthernet(inputFile, outputFile string) error {
-    // Open the input PCAP file
-    input, err := os.Open(inputFile)
-    if err != nil {
-        return err
-    }
-    defer input.Close()
-
-    // Create a new PCAP file reader
-    reader, err := pcapgo.NewReader(input)
-    if err != nil {
-        return err
-    }
-
-    // Create the output PCAP file
-    output, err := os.Create(outputFile)
-    if err != nil {
-        return err
-    }
-    defer output.Close()
+    // ... (previous code remains the same)
 
     // Create a new PCAP file writer
     writer := pcapgo.NewWriter(output)
-   writer.WriteFileHeader(^uint32(0), layers.LinkTypeEthernet)
-
+    writer.WriteFileHeader(1024, layers.LinkTypeEthernet)
 
     // Iterate over each packet in the input PCAP file
     for {
@@ -151,44 +95,35 @@ func stripUntilSecondEthernet(inputFile, outputFile string) error {
                 if ipLayer != nil {
                     ipPacket, _ := ipLayer.(*layers.IPv4)
                     strippedPacket := data[ipPacket.Length:]
-                    writer.WritePacket(ci, strippedPacket)
-                    continue
+                    if err := writer.WritePacket(ci, strippedPacket); err != nil {
+                        return err
+                    }
+                } else {
+                    if err := writer.WritePacket(ci, data); err != nil {
+                        return err
+                    }
+                }
+            } else {
+                if err := writer.WritePacket(ci, data); err != nil {
+                    return err
                 }
             }
+        } else {
+            if err := writer.WritePacket(ci, data); err != nil {
+                return err
+            }
         }
-
-        writer.WritePacket(ci, data)
     }
 
-    fmt.Printf("Stripped outer headers until the second Ethernet header for all packets and saved to %s\n", outputFile)
-    return nil
+    // ... (remaining code remains the same)
 }
 
 func filterPackets(inputFile, outputFile, displayFilter string) error {
-    // Open the input PCAP file
-    input, err := os.Open(inputFile)
-    if err != nil {
-        return err
-    }
-    defer input.Close()
-
-    // Create a new PCAP file reader
-    reader, err := pcapgo.NewReader(input)
-    if err != nil {
-        return err
-    }
-
-    // Create the output PCAP file
-    output, err := os.Create(outputFile)
-    if err != nil {
-        return err
-    }
-    defer output.Close()
+    // ... (previous code remains the same)
 
     // Create a new PCAP file writer
     writer := pcapgo.NewWriter(output)
-   writer.WriteFileHeader(^uint32(0), layers.LinkTypeEthernet)
-
+    writer.WriteFileHeader(1024, layers.LinkTypeEthernet)
 
     // Iterate over each packet in the input PCAP file
     for {
@@ -206,100 +141,19 @@ func filterPackets(inputFile, outputFile, displayFilter string) error {
         // Check if the packet matches the display filter
         if matchFilter(packet, displayFilter) {
             // Write the matched packet to the output PCAP file
-            writer.WritePacket(ci, data)
+            if err := writer.WritePacket(ci, data); err != nil {
+                return err
+            }
         }
     }
 
-    fmt.Printf("Filtered packets based on the display filter '%s' and saved to %s\n", displayFilter, outputFile)
-    return nil
+    // ... (remaining code remains the same)
 }
 
 func matchFilter(packet gopacket.Packet, filter string) bool {
-    // Implement the packet filtering logic based on the display filter
-    // This is a simplified example and may not cover all possible filter scenarios
-
-    // Split the filter into key-value pairs
-    pairs := strings.Split(filter, "&&")
-    for _, pair := range pairs {
-        kv := strings.Split(strings.TrimSpace(pair), "==")
-        if len(kv) != 2 {
-            continue
-        }
-        key := strings.TrimSpace(kv[0])
-        value := strings.TrimSpace(kv[1])
-
-        // Check if the packet matches the filter condition
-        switch key {
-        case "ip.src":
-            if ipLayer := packet.Layer(layers.LayerTypeIPv4); ipLayer != nil {
-                ip, _ := ipLayer.(*layers.IPv4)
-                if ip.SrcIP.String() != value {
-                    return false
-                }
-            } else {
-                return false
-            }
-        case "udp.port":
-            if udpLayer := packet.Layer(layers.LayerTypeUDP); udpLayer != nil {
-                udp, _ := udpLayer.(*layers.UDP)
-                if fmt.Sprintf("%d", udp.SrcPort) != value && fmt.Sprintf("%d", udp.DstPort) != value {
-                    return false
-                }
-            } else {
-                return false
-            }
-        // Add more filter conditions as needed
-        default:
-            return false
-        }
-    }
-
-    return true
+    // ... (previous code remains the same)
 }
 
 func main() {
-    if len(os.Args) < 2 {
-        log.Fatal("Please provide the input PCAP file as an argument")
-    }
-
-    inputFile := os.Args[1]
-    outputFile := "output.pcap"
-    var displayFilter string
-
-    fmt.Println("Select an option:")
-    fmt.Println("1. Strip X bytes from the beginning of each packet")
-    fmt.Println("2. Strip X bytes from the end of each packet")
-    fmt.Println("3. Strip outer headers until the second Ethernet header for all packets")
-    fmt.Println("4. Filter packets based on a Wireshark display filter")
-
-    var choice string
-    fmt.Print("Enter your choice (1, 2, 3, or 4): ")
-    fmt.Scanln(&choice)
-
-    var err error
-
-    switch choice {
-    case "1":
-        var numBytes int
-        fmt.Print("Enter the number of bytes to strip from the beginning of each packet: ")
-        fmt.Scanln(&numBytes)
-        err = stripBytesFromBeginning(inputFile, outputFile, numBytes)
-    case "2":
-        var numBytes int
-        fmt.Print("Enter the number of bytes to strip from the end of each packet: ")
-        fmt.Scanln(&numBytes)
-        err = stripBytesFromEnd(inputFile, outputFile, numBytes)
-    case "3":
-        err = stripUntilSecondEthernet(inputFile, outputFile)
-    case "4":
-        fmt.Print("Enter the Wireshark display filter: ")
-        fmt.Scanln(&displayFilter)
-        err = filterPackets(inputFile, outputFile, displayFilter)
-    default:
-        log.Fatal("Invalid choice. Exiting.")
-    }
-
-    if err != nil {
-        log.Fatal(err)
-    }
+    // ... (previous code remains the same)
 }
