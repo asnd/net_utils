@@ -13,6 +13,10 @@ build:
     - go get github.com/google/gopacket
     - go get github.com/google/gopacket/layers
     - go get github.com/google/gopacket/pcapgo
+    - go get github.com/fyne-io/fyne/app
+    - go get github.com/fyne-io/fyne/container
+    - go get github.com/fyne-io/fyne/dialog
+    - go get github.com/fyne-io/fyne/widget
     - mkdir -p build
     - GOOS=linux GOARCH=amd64 go build -o build/${PACKAGE_NAME}-linux-amd64 pcap_stripper.go
     - GOOS=linux GOARCH=arm64 go build -o build/${PACKAGE_NAME}-linux-arm64 pcap_stripper.go
