@@ -1,111 +1,96 @@
 package main
 
 import (
+    "encoding/hex"
+    "flag"
     "fmt"
     "os"
-    "strconv"
 
-    "fyne.io/fyne/v2"
-    "fyne.io/fyne/v2/app"
-    "fyne.io/fyne/v2/container"
-    "fyne.io/fyne/v2/dialog"
-    "fyne.io/fyne/v2/widget"
     "github.com/google/gopacket"
     "github.com/google/gopacket/pcap"
     "github.com/google/gopacket/pcapgo"
 )
 
-func main() {
-    a := app.New()
-    w := a.NewWindow("PCAP Stripper")
-
-    // UI Elements
-    filePathEntry := widget.NewEntry()
-    filePathEntry.SetPlaceHolder("Select .cap or .pcap file")
-
-    selectFileButton := widget.NewButton("Select File", func() {
-        fd := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
-            if err == nil && reader != nil {
-                filePathEntry.SetText(reader.URI().Path())
-            }
-        }, w)
-        fd.SetFilter(dialog.NewExtensionFileFilter([]string{".cap", ".pcap"}))
-        fd.Show()
-    })
-
-    bytesEntry := widget.NewEntry()
-    bytesEntry.SetPlaceHolder("Enter number of bytes to strip")
-
-    positionSelect := widget.NewSelect([]string{"Beginning", "End"}, func(value string) {})
-
-    startButton := widget.NewButton("Start", func() {
-        filePath := filePathEntry.Text
-        bytesToStrip, err := strconv.Atoi(bytesEntry.Text)
-        if err != nil {
-            dialog.ShowError(fmt.Errorf("Invalid number of bytes"), w)
-            return
+func stripBytes(packetData []byte, numBytes int, fromBeginning bool) []byte {
+    if fromBeginning {
+        if len(packetData) > numBytes {
+            return packetData[numBytes:] // Strip from the beginning
         }
-        position := positionSelect.Selected
-
-        err = stripBytes(filePath, bytesToStrip, position)
-        if err != nil {
-            dialog.ShowError(err, w)
-        } else {
-            dialog.ShowInformation("Success", "File processed successfully", w)
+        return []byte{} // Packet too short, strip everything
+    } else {
+        if len(packetData) > numBytes {
+            return packetData[:len(packetData)-numBytes] // Strip from the end
         }
-    })
-
-    // Layout
-    form := container.NewVBox(
-        filePathEntry,
-        selectFileButton,
-        bytesEntry,
-        positionSelect,
-        startButton,
-    )
-
-    w.SetContent(form)
-    w.ShowAndRun()
+        return []byte{} // Packet too short, strip everything
+    }
 }
 
-func stripBytes(filePath string, bytesToStrip int, position string) error {
-    handle, err := pcap.OpenOffline(filePath)
+func main() {
+    // Command-line arguments
+    inputFile := flag.String("input", "", "Input PCAP file path")
+    outputFile := flag.String("output", "", "Output PCAP file path")
+    numBytes := flag.Int("bytes", 0, "Number of bytes to strip")
+    direction := flag.String("direction", "beginning", "Strip from 'beginning' or 'end'")
+    flag.Parse()
+
+    if *inputFile == "" || *outputFile == "" || *numBytes <= 0 {
+        fmt.Println("Please provide valid input, output file paths, and a positive number of bytes to strip.")
+        flag.Usage()
+        return
+    }
+
+    fromBeginning := *direction == "beginning"
+
+    // Open the input PCAP file
+    handle, err := pcap.OpenOffline(*inputFile)
     if err != nil {
-        return fmt.Errorf("failed to open file: %w", err)
+        fmt.Printf("Error opening input file: %v\n", err)
+        return
     }
     defer handle.Close()
 
-    newFilePath := filePath + "_stripped.pcap"
-    f, err := os.Create(newFilePath)
+    // Create the output PCAP file
+    f, err := os.Create(*outputFile)
     if err != nil {
-        return fmt.Errorf("failed to create new file: %w", err)
+        fmt.Printf("Error creating output file: %v\n", err)
+        return
     }
     defer f.Close()
 
-    w := pcapgo.NewWriter(f)
-    w.WriteFileHeader(65536, handle.LinkType())
+    // Create a new pcap writer
+    writer := pcapgo.NewWriter(f)
+    writer.WriteFileHeader(65535, handle.LinkType())
 
+    // Process packets
     packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
+    var strippedPackets [][]byte
     for packet := range packetSource.Packets() {
-        packetData := packet.Data()
-        var newPacketData []byte
-
-        if position == "Beginning" {
-            if bytesToStrip >= len(packetData) {
-                return fmt.Errorf("number of bytes to strip exceeds packet size")
-            }
-            newPacketData = packetData[bytesToStrip:]
-        } else if position == "End" {
-            if bytesToStrip >= len(packetData) {
-                return fmt.Errorf("number of bytes to strip exceeds packet size")
-            }
-            newPacketData = packetData[:len(packetData)-bytesToStrip]
-        } else {
-            return fmt.Errorf("invalid position: %s", position)
+        strippedPacket := stripBytes(packet.Data(), *numBytes, fromBeginning)
+        if len(strippedPacket) > 0 { // Avoid writing empty packets
+            strippedPackets = append(strippedPackets, strippedPacket)
+            writer.WritePacket(gopacket.CaptureInfo{
+                Timestamp:      packet.Metadata().CaptureInfo.Timestamp,
+                Length:         len(strippedPacket),
+                CaptureLength:  len(strippedPacket),
+            }, strippedPacket)
         }
-
-        w.WritePacket(packet.Metadata().CaptureInfo, newPacketData)
     }
 
-    return nil
+    // Output the new file size
+    newFileInfo, err := os.Stat(*outputFile)
+    if err != nil {
+        fmt.Printf("Error getting new file info: %v\n", err)
+        return
+    }
+    fmt.Printf("New file size: %d bytes\n", newFileInfo.Size())
+
+    // Display the first 20 bytes of the first 5 packets
+    fmt.Println("\nFirst 20 bytes of the first 5 packets:")
+    for i, packet := range strippedPackets[:5] {
+        if len(packet) >= 20 {
+            fmt.Printf("Packet %d: %s\n", i+1, hex.EncodeToString(packet[:20]))
+        } else {
+            fmt.Printf("Packet %d: %s (less than 20 bytes)\n", i+1, hex.EncodeToString(packet))
+        }
+    }
 }
