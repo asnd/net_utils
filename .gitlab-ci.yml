@@ -9,6 +9,7 @@ variables:
 .default-before_script: &default-before_script
   - go mod init strip_pcap || true
   - go mod tidy
+  - apt-get update && apt-get install -y libpcap-dev
 
 build_macos_arm:
   stage: build
