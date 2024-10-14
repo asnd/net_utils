@@ -5,13 +5,19 @@ variables:
   # Use the latest Go image
   GO_VERSION: "golang:latest"
 
+# Define a reusable before_script to initialize Go module
+.default-before_script: &default-before_script
+  - go mod init strip_pcap || true
+  - go mod tidy
+
 build_macos_arm:
   stage: build
   image: $GO_VERSION
+  before_script:
+    *default-before_script
   script:
     - echo "Building for macOS ARM..."
     - GOOS=darwin GOARCH=arm64 go build -o strip_pcap_mac_arm64 strip_pcap.go
   artifacts:
     paths:
       - strip_pcap_mac_arm64
-
