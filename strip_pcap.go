@@ -1,7 +1,6 @@
 package main
 
 import (
-    "bytes"
     "encoding/hex"
     "flag"
     "fmt"
@@ -9,7 +8,6 @@ import (
     "os"
 
     "github.com/google/gopacket"
-    "github.com/google/gopacket/pcap"
     "github.com/google/gopacket/pcapgo"
 )
 
@@ -38,31 +36,41 @@ func main() {
 }
 
 func trimPackets(inputFile, outputFile string, trimBytes int, trimFrom string) error {
-    handle, err := pcap.OpenOffline(inputFile)
+    inputHandle, err := os.Open(inputFile)
     if err != nil {
         return fmt.Errorf("failed to open input file: %v", err)
     }
-    defer handle.Close()
+    defer inputHandle.Close()
 
-    // Get file info for output pcap file
-    f, err := os.Create(outputFile)
+    reader, err := pcapgo.NewReader(inputHandle)
+    if err != nil {
+        return fmt.Errorf("failed to create pcap reader: %v", err)
+    }
+
+    outputHandle, err := os.Create(outputFile)
     if err != nil {
         return fmt.Errorf("failed to create output file: %v", err)
     }
-    defer f.Close()
+    defer outputHandle.Close()
 
-    w := pcapgo.NewWriter(f)
-    err = w.WriteFileHeader(65536, handle.LinkType())
+    writer := pcapgo.NewWriter(outputHandle)
+    err = writer.WriteFileHeader(reader.Snaplen, reader.LinkType())
     if err != nil {
         return fmt.Errorf("failed to write file header: %v", err)
     }
 
-    packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
     packetCount := 0
 
-    for packet := range packetSource.Packets() {
+    for {
+        data, ci, err := reader.ReadPacketData()
+        if err != nil {
+            if err.Error() == "EOF" {
+                break
+            }
+            return fmt.Errorf("error reading packet: %v", err)
+        }
+
         packetCount++
-        data := packet.Data()
         pktLen := len(data)
 
         if trimBytes >= pktLen {
@@ -77,14 +85,10 @@ func trimPackets(inputFile, outputFile string, trimBytes int, trimFrom string) e
             trimmedData = data[:pktLen-trimBytes]
         }
 
-        ci := gopacket.CaptureInfo{
-            Timestamp:      packet.Metadata().Timestamp,
-            CaptureLength:  len(trimmedData),
-            Length:         len(trimmedData),
-            InterfaceIndex: packet.Metadata().InterfaceIndex,
-        }
+        ci.CaptureLength = len(trimmedData)
+        ci.Length = len(trimmedData)
 
-        err = w.WritePacket(ci, trimmedData)
+        err = writer.WritePacket(ci, trimmedData)
         if err != nil {
             return fmt.Errorf("failed to write packet: %v", err)
         }
@@ -99,26 +103,25 @@ func trimPackets(inputFile, outputFile string, trimBytes int, trimFrom string) e
 
     // Display first 20 bytes of first 5 packets
     fmt.Println("\nFirst 20 bytes of first 5 packets:")
-    outputHandle, err := pcap.OpenOffline(outputFile)
+    outputHandle.Seek(0, 0) // Reset file pointer to the beginning
+    reader, err = pcapgo.NewReader(outputHandle)
     if err != nil {
-        return fmt.Errorf("failed to open output file: %v", err)
+        return fmt.Errorf("failed to create pcap reader for output file: %v", err)
     }
-    defer outputHandle.Close()
 
-    outputPacketSource := gopacket.NewPacketSource(outputHandle, outputHandle.LinkType())
-
-    i := 0
-    for packet := range outputPacketSource.Packets() {
-        i++
-        data := packet.Data()
+    for i := 0; i < 5; i++ {
+        data, _, err := reader.ReadPacketData()
+        if err != nil {
+            if err.Error() == "EOF" {
+                break
+            }
+            return fmt.Errorf("error reading packet: %v", err)
+        }
         first20Bytes := data
         if len(data) > 20 {
             first20Bytes = data[:20]
         }
-        fmt.Printf("Packet %d: %s\n", i, hex.EncodeToString(first20Bytes))
-        if i >= 5 {
-            break
-        }
+        fmt.Printf("Packet %d: %s\n", i+1, hex.EncodeToString(first20Bytes))
     }
 
     return nil
