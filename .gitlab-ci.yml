@@ -9,7 +9,7 @@ before_script:
 build_linux:
   stage: build
   tags:
-    - linux
+    #- linux
   script:
     - echo "Building on Linux x86"
     - GOOS=linux GOARCH=386 go build -o strip_pcap_linux_x86 strip_pcap.go
