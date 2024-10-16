@@ -34,14 +34,14 @@ setup_module:
 
 
 
-build_macos:
+build_windows:
   stage: build
   image: golang:1.20-bullseye
   needs:
     - setup_module
   script:
-    - echo "Building on macOS ARM"
-    - GOOS=darwin GOARCH=arm64 go build -o strip_pcap_macos_arm strip_pcap.go
+    - echo "Building on Windows x86"
+    - GOOS=windows GOARCH=386 go build -o strip_pcap_windows_x86.exe strip_pcap.go
   artifacts:
     paths:
-      - strip_pcap_macos_arm
+      - strip_pcap_windows_x86.exe
