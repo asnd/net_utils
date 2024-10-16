@@ -1,9 +1,11 @@
 package main
 
 import (
+    "bytes"
     "encoding/hex"
     "flag"
     "fmt"
+    "log"
     "os"
 
     "github.com/google/gopacket"
@@ -11,86 +13,113 @@ import (
     "github.com/google/gopacket/pcapgo"
 )
 
-func stripBytes(packetData []byte, numBytes int, fromBeginning bool) []byte {
-    if fromBeginning {
-        if len(packetData) > numBytes {
-            return packetData[numBytes:] // Strip from the beginning
-        }
-        return []byte{} // Packet too short, strip everything
-    } else {
-        if len(packetData) > numBytes {
-            return packetData[:len(packetData)-numBytes] // Strip from the end
-        }
-        return []byte{} // Packet too short, strip everything
+func main() {
+    // Command-line arguments
+    trimBytes := flag.Int("x", 0, "Number of bytes to trim from each packet")
+    inputFile := flag.String("i", "", "Input pcap file")
+    outputFile := flag.String("o", "", "Output pcap file")
+    trimFrom := flag.String("from", "end", "Trim from 'beginning' or 'end' of each packet")
+    flag.Parse()
+
+    if *trimBytes <= 0 {
+        log.Fatal("Please specify a positive number of bytes to trim using -x")
+    }
+    if *inputFile == "" || *outputFile == "" {
+        log.Fatal("Please specify input and output pcap files using -i and -o")
+    }
+    if *trimFrom != "beginning" && *trimFrom != "end" {
+        log.Fatal("Please specify 'beginning' or 'end' for the --from parameter")
+    }
+
+    err := trimPackets(*inputFile, *outputFile, *trimBytes, *trimFrom)
+    if err != nil {
+        log.Fatalf("Error: %v", err)
     }
 }
 
-func main() {
-    // Command-line arguments
-    inputFile := flag.String("input", "", "Input PCAP file path")
-    outputFile := flag.String("output", "", "Output PCAP file path")
-    numBytes := flag.Int("bytes", 0, "Number of bytes to strip")
-    direction := flag.String("direction", "beginning", "Strip from 'beginning' or 'end'")
-    flag.Parse()
-
-    if *inputFile == "" || *outputFile == "" || *numBytes <= 0 {
-        fmt.Println("Please provide valid input, output file paths, and a positive number of bytes to strip.")
-        flag.Usage()
-        return
-    }
-
-    fromBeginning := *direction == "beginning"
-
-    // Open the input PCAP file
-    handle, err := pcap.OpenOffline(*inputFile)
+func trimPackets(inputFile, outputFile string, trimBytes int, trimFrom string) error {
+    handle, err := pcap.OpenOffline(inputFile)
     if err != nil {
-        fmt.Printf("Error opening input file: %v\n", err)
-        return
+        return fmt.Errorf("failed to open input file: %v", err)
     }
     defer handle.Close()
 
-    // Create the output PCAP file
-    f, err := os.Create(*outputFile)
+    // Get file info for output pcap file
+    f, err := os.Create(outputFile)
     if err != nil {
-        fmt.Printf("Error creating output file: %v\n", err)
-        return
+        return fmt.Errorf("failed to create output file: %v", err)
     }
     defer f.Close()
 
-    // Create a new pcap writer
-    writer := pcapgo.NewWriter(f)
-    writer.WriteFileHeader(65535, handle.LinkType())
-
-    // Process packets
-    packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
-    var strippedPackets [][]byte
-    for packet := range packetSource.Packets() {
-        strippedPacket := stripBytes(packet.Data(), *numBytes, fromBeginning)
-        if len(strippedPacket) > 0 { // Avoid writing empty packets
-            strippedPackets = append(strippedPackets, strippedPacket)
-            writer.WritePacket(gopacket.CaptureInfo{
-                Timestamp:      packet.Metadata().CaptureInfo.Timestamp,
-                Length:         len(strippedPacket),
-                CaptureLength:  len(strippedPacket),
-            }, strippedPacket)
-        }
-    }
-
-    // Output the new file size
-    newFileInfo, err := os.Stat(*outputFile)
+    w := pcapgo.NewWriter(f)
+    err = w.WriteFileHeader(65536, handle.LinkType())
     if err != nil {
-        fmt.Printf("Error getting new file info: %v\n", err)
-        return
+        return fmt.Errorf("failed to write file header: %v", err)
     }
-    fmt.Printf("New file size: %d bytes\n", newFileInfo.Size())
 
-    // Display the first 20 bytes of the first 5 packets
-    fmt.Println("\nFirst 20 bytes of the first 5 packets:")
-    for i, packet := range strippedPackets[:5] {
-        if len(packet) >= 20 {
-            fmt.Printf("Packet %d: %s\n", i+1, hex.EncodeToString(packet[:20]))
+    packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
+    packetCount := 0
+
+    for packet := range packetSource.Packets() {
+        packetCount++
+        data := packet.Data()
+        pktLen := len(data)
+
+        if trimBytes >= pktLen {
+            // Skip packet if trim size is greater than or equal to packet size
+            continue
+        }
+
+        var trimmedData []byte
+        if trimFrom == "beginning" {
+            trimmedData = data[trimBytes:]
         } else {
-            fmt.Printf("Packet %d: %s (less than 20 bytes)\n", i+1, hex.EncodeToString(packet))
+            trimmedData = data[:pktLen-trimBytes]
+        }
+
+        ci := gopacket.CaptureInfo{
+            Timestamp:      packet.Metadata().Timestamp,
+            CaptureLength:  len(trimmedData),
+            Length:         len(trimmedData),
+            InterfaceIndex: packet.Metadata().InterfaceIndex,
+        }
+
+        err = w.WritePacket(ci, trimmedData)
+        if err != nil {
+            return fmt.Errorf("failed to write packet: %v", err)
         }
     }
+
+    // Display new file size
+    fi, err := os.Stat(outputFile)
+    if err != nil {
+        return fmt.Errorf("failed to get file info: %v", err)
+    }
+    fmt.Printf("New pcap file size: %d bytes\n", fi.Size())
+
+    // Display first 20 bytes of first 5 packets
+    fmt.Println("\nFirst 20 bytes of first 5 packets:")
+    outputHandle, err := pcap.OpenOffline(outputFile)
+    if err != nil {
+        return fmt.Errorf("failed to open output file: %v", err)
+    }
+    defer outputHandle.Close()
+
+    outputPacketSource := gopacket.NewPacketSource(outputHandle, outputHandle.LinkType())
+
+    i := 0
+    for packet := range outputPacketSource.Packets() {
+        i++
+        data := packet.Data()
+        first20Bytes := data
+        if len(data) > 20 {
+            first20Bytes = data[:20]
+        }
+        fmt.Printf("Packet %d: %s\n", i, hex.EncodeToString(first20Bytes))
+        if i >= 5 {
+            break
+        }
+    }
+
+    return nil
 }
