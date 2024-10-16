@@ -4,15 +4,17 @@ stages:
   - test
 
 variables:
-  # Ensure the Go modules cache is used
-  GOPATH: "$CI_PROJECT_DIR"
+  # Remove GOPATH to avoid conflicts with Go modules
+  # GOPATH: "$CI_PROJECT_DIR"
+  GO111MODULE: "on"
 
 cache:
   key: ${CI_COMMIT_REF_SLUG}
   paths:
-    - vendor/
-    - .cache/go-build
-    - pkg/mod
+    - go/pkg/mod
+    - go/bin
+    - go.sum
+    - go.mod
 
 before_script:
   - go version
@@ -22,16 +24,13 @@ setup_module:
   image: golang:1.20-bullseye
   script:
     - echo "Initializing Go module"
-    - go mod init strip_pcap
+    - go mod init strip_pcap || true
     - go get github.com/google/gopacket
     - go mod tidy
   artifacts:
     paths:
       - go.mod
       - go.sum
-      - vendor/
-      - .cache/go-build
-      - pkg/mod
 
 build_linux:
   stage: build
@@ -44,4 +43,3 @@ build_linux:
   artifacts:
     paths:
       - strip_pcap_linux_x86
-
