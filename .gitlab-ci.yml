@@ -2,17 +2,25 @@ stages:
   - build
   - test
 
+variables:
+  # Ensure the Go modules cache is used
+  GOPATH: "$CI_PROJECT_DIR"
+
+cache:
+  paths:
+    - vendor/
+    - .cache/go-build
+    - go.sum
+
 before_script:
   - go version
   - go mod download
 
 build_linux:
   stage: build
-  tags:
-    #- linux
+  image: golang:1.20-bullseye
   script:
     - echo "Building on Linux x86"
     - GOOS=linux GOARCH=386 go build -o strip_pcap_linux_x86 strip_pcap.go
-
 
 
