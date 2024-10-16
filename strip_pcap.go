@@ -7,7 +7,6 @@ import (
     "log"
     "os"
 
-    "github.com/google/gopacket"
     "github.com/google/gopacket/pcapgo"
 )
 
@@ -54,7 +53,7 @@ func trimPackets(inputFile, outputFile string, trimBytes int, trimFrom string) e
     defer outputHandle.Close()
 
     writer := pcapgo.NewWriter(outputHandle)
-    err = writer.WriteFileHeader(reader.Snaplen, reader.LinkType())
+    err = writer.WriteFileHeader(reader.Snaplen(), reader.LinkType())
     if err != nil {
         return fmt.Errorf("failed to write file header: %v", err)
     }
