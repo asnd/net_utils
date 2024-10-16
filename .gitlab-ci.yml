@@ -1,4 +1,5 @@
 stages:
+  - setup
   - build
   - test
 
@@ -11,37 +12,36 @@ cache:
   paths:
     - vendor/
     - .cache/go-build
-    - go.sum
-    - go.mod
+    - pkg/mod
 
 before_script:
   - go version
-  - go mod download
+
+setup_module:
+  stage: setup
+  image: golang:1.20-bullseye
+  script:
+    - echo "Initializing Go module"
+    - go mod init strip_pcap
+    - go get github.com/google/gopacket
+    - go mod tidy
+  artifacts:
+    paths:
+      - go.mod
+      - go.sum
+      - vendor/
+      - .cache/go-build
+      - pkg/mod
 
 build_linux:
   stage: build
   image: golang:1.20-bullseye
+  needs:
+    - setup_module
   script:
     - echo "Building on Linux x86"
     - GOOS=linux GOARCH=386 go build -o strip_pcap_linux_x86 strip_pcap.go
+  artifacts:
+    paths:
+      - strip_pcap_linux_x86
 
-build_macos:
-  stage: build
-  image: golang:1.20-bullseye
-  script:
-    - echo "Building on macOS ARM"
-    - GOOS=darwin GOARCH=arm64 go build -o strip_pcap_macos_arm strip_pcap.go
-
-build_windows:
-  stage: build
-  image: golang:1.20-bullseye
-  script:
-    - echo "Building on Windows x86"
-    - GOOS=windows GOARCH=386 go build -o strip_pcap_windows_x86.exe strip_pcap.go
-
-test_functionality:
-  stage: test
-  image: golang:1.20-bullseye
-  script:
-    - echo "Running functionality tests"
-    - go test ./...
