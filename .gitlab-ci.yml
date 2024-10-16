@@ -32,14 +32,16 @@ setup_module:
       - go.mod
       - go.sum
 
-build_linux:
+
+
+build_macos:
   stage: build
   image: golang:1.20-bullseye
   needs:
     - setup_module
   script:
-    - echo "Building on Linux x86"
-    - GOOS=linux GOARCH=386 go build -o strip_pcap_linux_x86 strip_pcap.go
+    - echo "Building on macOS ARM"
+    - GOOS=darwin GOARCH=arm64 go build -o strip_pcap_macos_arm strip_pcap.go
   artifacts:
     paths:
-      - strip_pcap_linux_x86
+      - strip_pcap_macos_arm
