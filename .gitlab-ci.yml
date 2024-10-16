@@ -7,10 +7,12 @@ variables:
   GOPATH: "$CI_PROJECT_DIR"
 
 cache:
+  key: ${CI_COMMIT_REF_SLUG}
   paths:
     - vendor/
     - .cache/go-build
     - go.sum
+    - go.mod
 
 before_script:
   - go version
@@ -23,4 +25,23 @@ build_linux:
     - echo "Building on Linux x86"
     - GOOS=linux GOARCH=386 go build -o strip_pcap_linux_x86 strip_pcap.go
 
+build_macos:
+  stage: build
+  image: golang:1.20-bullseye
+  script:
+    - echo "Building on macOS ARM"
+    - GOOS=darwin GOARCH=arm64 go build -o strip_pcap_macos_arm strip_pcap.go
 
+build_windows:
+  stage: build
+  image: golang:1.20-bullseye
+  script:
+    - echo "Building on Windows x86"
+    - GOOS=windows GOARCH=386 go build -o strip_pcap_windows_x86.exe strip_pcap.go
+
+test_functionality:
+  stage: test
+  image: golang:1.20-bullseye
+  script:
+    - echo "Running functionality tests"
+    - go test ./...
