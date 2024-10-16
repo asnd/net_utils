@@ -1,24 +1,18 @@
 stages:
   - build
+  - test
 
-variables:
-  # Use the latest Go image
-  GO_VERSION: "golang:latest"
+before_script:
+  - go version
+  - go mod download
 
-# Define a reusable before_script to initialize Go module
-.default-before_script: &default-before_script
-  - go mod init strip_pcap || true
-  - go mod tidy
-  - apt-get update && apt-get install -y libpcap-dev
-
-build_macos_arm:
+build_linux:
   stage: build
-  image: $GO_VERSION
-  before_script:
-    *default-before_script
+  tags:
+    - linux
   script:
-    - echo "Building for macOS ARM..."
-    - GOOS=darwin GOARCH=arm64 go build -o strip_pcap_mac_arm64 strip_pcap.go
-  artifacts:
-    paths:
-      - strip_pcap_mac_arm64
+    - echo "Building on Linux x86"
+    - GOOS=linux GOARCH=386 go build -o strip_pcap_linux_x86 strip_pcap.go
+
+
+
