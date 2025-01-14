@@ -1,3 +1,28 @@
+// trimPackets trims a specified number of bytes from each packet in the input pcap file
+// and writes the trimmed packets to the output pcap file. The trimming can be done from
+// the beginning or the end of each packet based on the provided parameter.
+//
+// Parameters:
+//   - inputFile: Path to the input pcap file.
+//   - outputFile: Path to the output pcap file.
+//   - trimBytes: Number of bytes to trim from each packet (must be positive).
+//   - trimFrom: Specifies whether to trim from the 'beginning' or 'end' of each packet.
+//
+// Returns:
+//   - error: An error object if an error occurs during the trimming process, otherwise nil.
+//
+// The function performs the following steps:
+//   1. Opens the input pcap file for reading.
+//   2. Creates a pcap reader for the input file.
+//   3. Creates the output pcap file for writing.
+//   4. Writes the pcap file header to the output file.
+//   5. Iterates through each packet in the input file, trims the specified number of bytes
+//      from the beginning or end of the packet, and writes the trimmed packet to the output file.
+//   6. Displays the new size of the output pcap file.
+//   7. Displays the first 20 bytes of the first 5 packets in the output file.
+//
+// Note: If the number of bytes to trim is greater than or equal to the packet size, the packet
+//       is skipped and not written to the output file.
 package main
 
 import (
@@ -10,25 +35,50 @@ import (
     "github.com/google/gopacket/pcapgo"
 )
 
+type trimOptions struct {
+    trimBytes int
+    inputFile string
+    outputFile string
+    trimFrom string
+}
+
+func (opts *trimOptions) validate() {
+    if opts.trimBytes <= 0 {
+        log.Fatalf("Please specify a positive number of bytes to trim using -x")
+    }
+    if opts.inputFile == "" || opts.outputFile == "" {
+        log.Fatalf("Please specify input and output pcap files using -i and -o")
+    }
+    if opts.trimFrom != "beginning" && opts.trimFrom != "end" {
+        log.Fatalf("Please specify 'beginning' or 'end' for the --from parameter")
+    }
+}
+
+// main is the entry point for the pcap trimming utility. It processes command-line arguments
+// to determine the number of bytes to trim from each packet, the input and output pcap files,
+// and whether to trim from the beginning or end of each packet. It validates the arguments
+// and calls the trimPackets function to perform the trimming operation.
+//
+// Usage:
+//   -x int
+//         Number of bytes to trim from each packet (must be positive)
+//   -i string
+//         Input pcap file (required)
+//   -o string
+//         Output pcap file (required)
+//   --from string
+//         Trim from 'beginning' or 'end' of each packet (default "end")
 func main() {
-    // Command-line arguments
-    trimBytes := flag.Int("x", 0, "Number of bytes to trim from each packet")
-    inputFile := flag.String("i", "", "Input pcap file")
-    outputFile := flag.String("o", "", "Output pcap file")
-    trimFrom := flag.String("from", "end", "Trim from 'beginning' or 'end' of each packet")
+    opts := &trimOptions{}
+    flag.IntVar(&opts.trimBytes, "x", 0, "Number of bytes to trim from each packet")
+    flag.StringVar(&opts.inputFile, "i", "", "Input pcap file")
+    flag.StringVar(&opts.outputFile, "o", "", "Output pcap file")
+    flag.StringVar(&opts.trimFrom, "from", "end", "Trim from 'beginning' or 'end' of each packet")
     flag.Parse()
 
-    if *trimBytes <= 0 {
-        log.Fatal("Please specify a positive number of bytes to trim using -x")
-    }
-    if *inputFile == "" || *outputFile == "" {
-        log.Fatal("Please specify input and output pcap files using -i and -o")
-    }
-    if *trimFrom != "beginning" && *trimFrom != "end" {
-        log.Fatal("Please specify 'beginning' or 'end' for the --from parameter")
-    }
+    opts.validate()
 
-    err := trimPackets(*inputFile, *outputFile, *trimBytes, *trimFrom)
+    err := trimPackets(opts.inputFile, opts.outputFile, opts.trimBytes, opts.trimFrom)
     if err != nil {
         log.Fatalf("Error: %v", err)
     }
