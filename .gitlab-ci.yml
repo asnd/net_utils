@@ -32,8 +32,6 @@ setup_module:
       - go.mod
       - go.sum
 
-
-
 build_windows:
   stage: build
   image: golang:1.20-bullseye
@@ -45,3 +43,15 @@ build_windows:
   artifacts:
     paths:
       - strip_pcap_windows_x86.exe
+
+build_macos_m1:
+  stage: build
+  image: golang:1.20-bullseye
+  needs:
+    - setup_module
+  script:
+    - echo "Building on macOS M1"
+    - GOOS=darwin GOARCH=arm64 go build -o strip_pcap_macos_m1 strip_pcap.go
+  artifacts:
+    paths:
+      - strip_pcap_macos_m1
