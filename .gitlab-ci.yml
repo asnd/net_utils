@@ -237,9 +237,11 @@ build:macos-x64:
 package:all:
   stage: package
   needs:
-    - build:linux-x64
-    - build:windows-x64
-    - build:macos-arm64
+    - job: build:linux-x64
+    - job: build:windows-x64
+      optional: true
+    - job: build:macos-arm64
+      optional: true
   script:
     - echo "Creating release package with all binaries..."
     - mkdir -p release
@@ -251,7 +253,7 @@ package:all:
     - cat SHA256SUMS.txt
     # Create README for release
     - |
-      cat > README.txt << 'EOF'
+      cat > README.txt << EOF
       PCAP Stripper - Multi-Platform Release
       =====================================
 
@@ -292,10 +294,10 @@ package:all:
     paths:
       - release/
     expire_in: 90 days
-  only:
-    - tags
-    - master
-    - main
+  rules:
+    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
 
 # ==============================================================================
 # RELEASE STAGE - Create GitLab release (only on tags)
@@ -324,5 +326,5 @@ release:
   artifacts:
     paths:
       - release/
-  only:
-    - tags
+  rules:
+    - if: '$CI_COMMIT_TAG'
