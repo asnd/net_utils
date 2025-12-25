@@ -1,57 +1,336 @@
+# GitLab CI/CD Pipeline for net_utils
+# Builds: pcap_stripper (CLI tool using Cobra framework)
+# Platforms: Linux x64, Windows x64, macOS ARM64
+
+image: golang:1.23-bookworm
+
 stages:
-  - setup
-  - build
+  - prepare
   - test
+  - build
+  - package
 
 variables:
-  # Remove GOPATH to avoid conflicts with Go modules
-  # GOPATH: "$CI_PROJECT_DIR"
-  GO111MODULE: "on"
+  PACKAGE_NAME: pcap_stripper
+  CGO_ENABLED: "1"
+  # Module caching for faster builds
+  GOPATH: $CI_PROJECT_DIR/.go
+  GOCACHE: $CI_PROJECT_DIR/.cache/go-build
 
+# Cache Go modules and build cache between jobs
 cache:
-  key: ${CI_COMMIT_REF_SLUG}
+  key: "${CI_COMMIT_REF_SLUG}"
   paths:
-    - go/pkg/mod
-    - go/bin
-    - go.sum
-    - go.mod
+    - .go/pkg/mod/
+    - .cache/go-build/
 
-before_script:
-  - go version
+# ==============================================================================
+# PREPARE STAGE - Download dependencies
+# ==============================================================================
 
-setup_module:
-  stage: setup
-  image: golang:1.20-bullseye
+download-dependencies:
+  stage: prepare
   script:
-    - echo "Initializing Go module"
-    - go mod init strip_pcap || true
-    - go get github.com/google/gopacket
-    - go mod tidy
+    - echo "Downloading Go modules..."
+    - go mod download
+    - go mod verify
+    - echo "Dependencies verified successfully"
   artifacts:
     paths:
       - go.mod
       - go.sum
+    expire_in: 1 hour
 
-build_windows:
-  stage: build
-  image: golang:1.20-bullseye
-  needs:
-    - setup_module
+# ==============================================================================
+# TEST STAGE - Comprehensive testing and quality checks
+# ==============================================================================
+
+# Run tests with race detection and coverage
+test:unit:
+  stage: test
+  needs: ["download-dependencies"]
+  before_script:
+    - apt-get update && apt-get install -y libpcap-dev
   script:
-    - echo "Building on Windows x86"
-    - GOOS=windows GOARCH=386 go build -o strip_pcap_windows_x86.exe strip_pcap.go
+    - echo "Running unit tests with race detection..."
+    - go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+    - go tool cover -func=coverage.txt
+  coverage: '/total:.*?(\d+\.\d+)%/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.txt
+    paths:
+      - coverage.txt
+    expire_in: 1 week
+
+# Static analysis with go vet
+test:vet:
+  stage: test
+  needs: ["download-dependencies"]
+  before_script:
+    - apt-get update && apt-get install -y libpcap-dev
+  script:
+    - echo "Running go vet static analysis..."
+    - go vet ./...
+    - echo "✓ No issues found"
+
+# Check code formatting
+test:fmt:
+  stage: test
+  needs: ["download-dependencies"]
+  script:
+    - echo "Checking code formatting..."
+    - |
+      if [ -n "$(gofmt -l .)" ]; then
+        echo "❌ The following files are not formatted correctly:"
+        gofmt -l .
+        echo ""
+        echo "Please run: gofmt -w ."
+        exit 1
+      fi
+    - echo "✓ All files are properly formatted"
+
+# Lint with golangci-lint (optional, comprehensive linting)
+test:lint:
+  stage: test
+  needs: ["download-dependencies"]
+  before_script:
+    - apt-get update && apt-get install -y libpcap-dev
+    # Install golangci-lint
+    - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.61.0
+    - export PATH=$PATH:$(go env GOPATH)/bin
+  script:
+    - echo "Running golangci-lint..."
+    - golangci-lint run --timeout=5m --enable=gofmt,govet,errcheck,staticcheck,unused,gosimple,structcheck,varcheck,ineffassign,deadcode,typecheck
+  allow_failure: true  # Don't block pipeline on lint warnings
+
+# Security scanning with gosec
+test:security:
+  stage: test
+  needs: ["download-dependencies"]
+  before_script:
+    - apt-get update && apt-get install -y libpcap-dev
+    # Install gosec
+    - curl -sfL https://raw.githubusercontent.com/securego/gosec/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.21.4
+    - export PATH=$PATH:$(go env GOPATH)/bin
+  script:
+    - echo "Running security scan with gosec..."
+    - gosec -fmt=json -out=gosec-report.json -no-fail ./...
+    - gosec ./...
   artifacts:
     paths:
-      - strip_pcap_windows_x86.exe
+      - gosec-report.json
+    expire_in: 1 week
+  allow_failure: true
 
-build_macos_m1:
+# ==============================================================================
+# BUILD STAGE - Multi-platform builds
+# ==============================================================================
+
+# Linux x64 build (primary platform)
+build:linux-x64:
   stage: build
-  image: golang:1.20-bullseye
-  needs:
-    - setup_module
+  needs: ["test:unit", "test:vet"]
+  before_script:
+    - apt-get update && apt-get install -y libpcap-dev
   script:
-    - echo "Building on macOS M1"
-    - GOOS=darwin GOARCH=arm64 go build -o strip_pcap_macos_m1 strip_pcap.go
+    - echo "Building for Linux x64..."
+    - mkdir -p build
+    - |
+      GOOS=linux GOARCH=amd64 CGO_ENABLED=1 go build \
+        -ldflags="-s -w -X 'main.Version=${CI_COMMIT_TAG:-dev}' -X 'main.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)' -X 'main.GitCommit=${CI_COMMIT_SHA:0:8}'" \
+        -o build/${PACKAGE_NAME}-linux-amd64 \
+        pcap_stripper.go
+    - chmod +x build/${PACKAGE_NAME}-linux-amd64
+    - ls -lh build/
+    - echo "✓ Linux x64 build complete"
+  artifacts:
+    name: "${PACKAGE_NAME}-${CI_COMMIT_REF_SLUG}-linux-amd64"
+    paths:
+      - build/${PACKAGE_NAME}-linux-amd64
+    expire_in: 30 days
+
+# Windows x64 build (with MinGW cross-compiler)
+build:windows-x64:
+  stage: build
+  needs: ["test:unit", "test:vet"]
+  before_script:
+    # Install MinGW cross-compiler and dependencies
+    - apt-get update && apt-get install -y gcc-mingw-w64-x86-64 libpcap-dev
+    # Download WinPcap developer pack for Windows build
+    - |
+      mkdir -p /tmp/wpdpack
+      cd /tmp/wpdpack
+      # Note: Using a stable WinPcap/Npcap SDK mirror or include it in repo
+      # For now, we'll use the Linux libpcap headers as reference
+      cd $CI_PROJECT_DIR
+  script:
+    - echo "Building for Windows x64..."
+    - mkdir -p build
+    - |
+      GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc \
+      go build \
+        -ldflags="-s -w -X 'main.Version=${CI_COMMIT_TAG:-dev}' -X 'main.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)' -X 'main.GitCommit=${CI_COMMIT_SHA:0:8}'" \
+        -o build/${PACKAGE_NAME}-windows-amd64.exe \
+        pcap_stripper.go
+    - ls -lh build/
+    - echo "✓ Windows x64 build complete"
+    - echo "⚠ Note: Windows binary requires Npcap/WinPcap runtime to be installed"
+  artifacts:
+    name: "${PACKAGE_NAME}-${CI_COMMIT_REF_SLUG}-windows-amd64"
+    paths:
+      - build/${PACKAGE_NAME}-windows-amd64.exe
+    expire_in: 30 days
+  allow_failure: true  # Windows cross-compilation may fail without proper WinPcap SDK
+
+# macOS ARM64 build (Apple Silicon)
+build:macos-arm64:
+  stage: build
+  needs: ["test:unit", "test:vet"]
+  before_script:
+    # Install cross-compilation tools
+    - apt-get update && apt-get install -y clang libpcap-dev
+  script:
+    - echo "Building for macOS ARM64 (Apple Silicon)..."
+    - mkdir -p build
+    - |
+      GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 CC=clang \
+      go build \
+        -ldflags="-s -w -X 'main.Version=${CI_COMMIT_TAG:-dev}' -X 'main.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)' -X 'main.GitCommit=${CI_COMMIT_SHA:0:8}'" \
+        -o build/${PACKAGE_NAME}-macos-arm64 \
+        pcap_stripper.go
+    - chmod +x build/${PACKAGE_NAME}-macos-arm64
+    - ls -lh build/
+    - echo "✓ macOS ARM64 build complete"
+    - echo "⚠ Note: Binary may need code signing for macOS Gatekeeper"
+  artifacts:
+    name: "${PACKAGE_NAME}-${CI_COMMIT_REF_SLUG}-macos-arm64"
+    paths:
+      - build/${PACKAGE_NAME}-macos-arm64
+    expire_in: 30 days
+  allow_failure: true  # Cross-compilation without macOS SDK may have limitations
+
+# Additional build: macOS x64 (Intel Macs) - optional
+build:macos-x64:
+  stage: build
+  needs: ["test:unit", "test:vet"]
+  before_script:
+    - apt-get update && apt-get install -y clang libpcap-dev
+  script:
+    - echo "Building for macOS x64 (Intel)..."
+    - mkdir -p build
+    - |
+      GOOS=darwin GOARCH=amd64 CGO_ENABLED=1 CC=clang \
+      go build \
+        -ldflags="-s -w -X 'main.Version=${CI_COMMIT_TAG:-dev}' -X 'main.BuildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)' -X 'main.GitCommit=${CI_COMMIT_SHA:0:8}'" \
+        -o build/${PACKAGE_NAME}-macos-amd64 \
+        pcap_stripper.go
+    - chmod +x build/${PACKAGE_NAME}-macos-amd64
+    - ls -lh build/
+    - echo "✓ macOS x64 build complete"
+  artifacts:
+    name: "${PACKAGE_NAME}-${CI_COMMIT_REF_SLUG}-macos-amd64"
+    paths:
+      - build/${PACKAGE_NAME}-macos-amd64
+    expire_in: 30 days
+  allow_failure: true
+  when: manual  # Only build when explicitly requested
+
+# ==============================================================================
+# PACKAGE STAGE - Create release artifacts
+# ==============================================================================
+
+package:all:
+  stage: package
+  needs:
+    - build:linux-x64
+    - build:windows-x64
+    - build:macos-arm64
+  script:
+    - echo "Creating release package with all binaries..."
+    - mkdir -p release
+    # Copy all successful builds
+    - cp build/* release/ 2>/dev/null || true
+    # Create checksums
+    - cd release
+    - sha256sum * > SHA256SUMS.txt
+    - cat SHA256SUMS.txt
+    # Create README for release
+    - |
+      cat > README.txt << 'EOF'
+      PCAP Stripper - Multi-Platform Release
+      =====================================
+
+      Version: ${CI_COMMIT_TAG:-dev}
+      Built: $(date -u +%Y-%m-%d)
+      Commit: ${CI_COMMIT_SHA:0:8}
+
+      Available Binaries:
+      ------------------
+      - pcap_stripper-linux-amd64       : Linux x86_64
+      - pcap_stripper-windows-amd64.exe : Windows x86_64 (requires Npcap)
+      - pcap_stripper-macos-arm64       : macOS ARM64 (Apple Silicon)
+      - pcap_stripper-macos-amd64       : macOS x86_64 (Intel)
+
+      Installation:
+      ------------
+      1. Download the binary for your platform
+      2. Make executable (Linux/macOS): chmod +x pcap_stripper-*
+      3. Run: ./pcap_stripper-* --help
+
+      Windows Users:
+      -------------
+      Install Npcap from https://npcap.com/ before using the Windows binary.
+
+      Verify Integrity:
+      ----------------
+      Check SHA256SUMS.txt to verify downloaded files.
+
+      Documentation:
+      -------------
+      See repository for full documentation and examples.
+      EOF
+    - cat README.txt
+    - cd ..
+    - echo "✓ Release package created"
+  artifacts:
+    name: "${PACKAGE_NAME}-${CI_COMMIT_REF_SLUG}-all-platforms"
+    paths:
+      - release/
+    expire_in: 90 days
+  only:
+    - tags
+    - master
+    - main
+
+# ==============================================================================
+# RELEASE STAGE - Create GitLab release (only on tags)
+# ==============================================================================
+
+release:
+  stage: package
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  needs:
+    - package:all
+  script:
+    - echo "Creating GitLab release for tag ${CI_COMMIT_TAG}"
+  release:
+    tag_name: $CI_COMMIT_TAG
+    name: 'Release $CI_COMMIT_TAG'
+    description: |
+      ## PCAP Stripper ${CI_COMMIT_TAG}
+
+      Multi-platform builds for Linux, Windows, and macOS.
+
+      ### Changes
+      See CHANGELOG.md for details.
+
+      ### Installation
+      Download the binary for your platform and follow the instructions in README.txt.
   artifacts:
     paths:
-      - strip_pcap_macos_m1
+      - release/
+  only:
+    - tags
