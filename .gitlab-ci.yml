@@ -2,7 +2,7 @@
 # Builds: pcap_stripper (CLI tool using Cobra framework)
 # Platforms: Linux x64, Windows x64, macOS ARM64
 
-image: golang:1.23-bookworm
+image: golang:1.25-bookworm
 
 stages:
   - prepare

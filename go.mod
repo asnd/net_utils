@@ -1,6 +1,6 @@
 module net_utils
 
-go 1.23
+go 1.25
 
 require (
 	github.com/google/gopacket v1.1.19
