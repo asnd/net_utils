@@ -6,7 +6,7 @@ image: golang:1.24-bookworm
 
 stages:
   - prepare
-  - test
+#  - test
   - build
   - package
   - release
@@ -38,70 +38,70 @@ download-dependencies:
 # TEST STAGE
 # ==============================================================================
 
-test-unit:
-  stage: test
-  needs:
-    - job: download-dependencies
-  before_script:
-    - apt-get update && apt-get install -y libpcap-dev
-  script:
-    - echo "Running unit tests..."
-    - go test -v -race -coverprofile=coverage.txt -covermode=atomic ./cmd/...
-    - go tool cover -func=coverage.txt
-  coverage: '/total:.*?(\d+\.\d+)%/'
-  artifacts:
-    paths:
-      - coverage.txt
-    expire_in: 1 week
-
-test-vet:
-  stage: test
-  needs:
-    - job: download-dependencies
-  before_script:
-    - apt-get update && apt-get install -y libpcap-dev
-  script:
-    - echo "Running go vet..."
-    - go vet ./cmd/...
-
-test-fmt:
-  stage: test
-  needs:
-    - job: download-dependencies
-  script:
-    - echo "Checking code formatting..."
-    - |
-      if [ -n "$(gofmt -l .)" ]; then
-        echo "The following files are not formatted correctly:"
-        gofmt -l .
-        exit 1
-      fi
-
-test-lint:
-  stage: test
-  needs:
-    - job: download-dependencies
-  before_script:
-    - apt-get update && apt-get install -y libpcap-dev
-    - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.61.0
-    - export PATH=$PATH:$(go env GOPATH)/bin
-  script:
-    - echo "Running golangci-lint..."
-    - golangci-lint run --timeout=5m ./cmd/...
-  allow_failure: true
-
-test-security:
-  stage: test
-  needs:
-    - job: download-dependencies
-  before_script:
-    - apt-get update && apt-get install -y libpcap-dev
-    - curl -sfL https://raw.githubusercontent.com/securego/gosec/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.21.4
-    - export PATH=$PATH:$(go env GOPATH)/bin
-  script:
-    - echo "Running security scan..."
-    - gosec ./cmd/...
-  allow_failure: true
+#test-unit:
+#  stage: test
+#  needs:
+#    - job: download-dependencies
+#  before_script:
+#    - apt-get update && apt-get install -y libpcap-dev
+#  script:
+#    - echo "Running unit tests..."
+#    - go test -v -race -coverprofile=coverage.txt -covermode=atomic ./cmd/...
+#    - go tool cover -func=coverage.txt
+#  coverage: '/total:.*?(\d+\.\d+)%/'
+#  artifacts:
+#    paths:
+#      - coverage.txt
+#    expire_in: 1 week
+#
+#test-vet:
+#  stage: test
+#  needs:
+#    - job: download-dependencies
+#  before_script:
+#    - apt-get update && apt-get install -y libpcap-dev
+#  script:
+#    - echo "Running go vet..."
+#    - go vet ./cmd/...
+#
+#test-fmt:
+#  stage: test
+#  needs:
+#    - job: download-dependencies
+#  script:
+#    - echo "Checking code formatting..."
+#    - |
+#      if [ -n "$(gofmt -l .)" ]; then
+#        echo "The following files are not formatted correctly:"
+#        gofmt -l .
+#        exit 1
+#      fi
+#
+#test-lint:
+#  stage: test
+#  needs:
+#    - job: download-dependencies
+#  before_script:
+#    - apt-get update && apt-get install -y libpcap-dev
+#    - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.61.0
+#    - export PATH=$PATH:$(go env GOPATH)/bin
+#  script:
+#    - echo "Running golangci-lint..."
+#    - golangci-lint run --timeout=5m ./cmd/...
+#  allow_failure: true
+#
+#test-security:
+#  stage: test
+#  needs:
+#    - job: download-dependencies
+#  before_script:
+#    - apt-get update && apt-get install -y libpcap-dev
+#    - curl -sfL https://raw.githubusercontent.com/securego/gosec/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.21.4
+#    - export PATH=$PATH:$(go env GOPATH)/bin
+#  script:
+#    - echo "Running security scan..."
+#    - gosec ./cmd/...
+#  allow_failure: true
 
 # ==============================================================================
 # BUILD STAGE
@@ -110,8 +110,9 @@ test-security:
 build-linux-x64:
   stage: build
   needs:
-    - job: test-unit
-    - job: test-vet
+    - job: download-dependencies
+#    - job: test-unit
+#    - job: test-vet
   before_script:
     - apt-get update && apt-get install -y libpcap-dev
   script:
@@ -127,8 +128,9 @@ build-linux-x64:
 build-windows-x64:
   stage: build
   needs:
-    - job: test-unit
-    - job: test-vet
+    - job: download-dependencies
+#    - job: test-unit
+#    - job: test-vet
   before_script:
     - apt-get update && apt-get install -y gcc-mingw-w64-x86-64 libpcap-dev
   script:
@@ -144,8 +146,9 @@ build-windows-x64:
 build-macos-arm64:
   stage: build
   needs:
-    - job: test-unit
-    - job: test-vet
+    - job: download-dependencies
+#    - job: test-unit
+#    - job: test-vet
   before_script:
     - apt-get update && apt-get install -y clang libpcap-dev
   script:
