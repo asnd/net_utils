@@ -2,7 +2,7 @@
 # Builds: pcap_stripper (CLI tool using Cobra framework)
 # Platforms: Linux x64, Windows x64, macOS ARM64
 
-image: golang:1.25-bookworm
+image: golang:1.24-bookworm
 
 stages:
   - prepare
@@ -46,7 +46,7 @@ test-unit:
     - apt-get update && apt-get install -y libpcap-dev
   script:
     - echo "Running unit tests..."
-    - go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+    - go test -v -race -coverprofile=coverage.txt -covermode=atomic ./cmd/...
     - go tool cover -func=coverage.txt
   coverage: '/total:.*?(\d+\.\d+)%/'
   artifacts:
@@ -62,7 +62,7 @@ test-vet:
     - apt-get update && apt-get install -y libpcap-dev
   script:
     - echo "Running go vet..."
-    - go vet ./...
+    - go vet ./cmd/...
 
 test-fmt:
   stage: test
@@ -87,7 +87,7 @@ test-lint:
     - export PATH=$PATH:$(go env GOPATH)/bin
   script:
     - echo "Running golangci-lint..."
-    - golangci-lint run --timeout=5m
+    - golangci-lint run --timeout=5m ./cmd/...
   allow_failure: true
 
 test-security:
@@ -100,7 +100,7 @@ test-security:
     - export PATH=$PATH:$(go env GOPATH)/bin
   script:
     - echo "Running security scan..."
-    - gosec ./...
+    - gosec ./cmd/...
   allow_failure: true
 
 # ==============================================================================
@@ -117,7 +117,7 @@ build-linux-x64:
   script:
     - echo "Building for Linux x64..."
     - mkdir -p build
-    - go build -o build/${PACKAGE_NAME}-linux-amd64 .
+    - go build -o build/${PACKAGE_NAME}-linux-amd64 ./cmd/pcap_stripper
     - chmod +x build/${PACKAGE_NAME}-linux-amd64
   artifacts:
     paths:
@@ -134,7 +134,7 @@ build-windows-x64:
   script:
     - echo "Building for Windows x64..."
     - mkdir -p build
-    - GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc go build -o build/${PACKAGE_NAME}-windows-amd64.exe .
+    - GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc go build -o build/${PACKAGE_NAME}-windows-amd64.exe ./cmd/pcap_stripper
   artifacts:
     paths:
       - build/${PACKAGE_NAME}-windows-amd64.exe
@@ -151,7 +151,7 @@ build-macos-arm64:
   script:
     - echo "Building for macOS ARM64..."
     - mkdir -p build
-    - GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 CC=clang go build -o build/${PACKAGE_NAME}-macos-arm64 .
+    - GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 CC=clang go build -o build/${PACKAGE_NAME}-macos-arm64 ./cmd/pcap_stripper
   artifacts:
     paths:
       - build/${PACKAGE_NAME}-macos-arm64
