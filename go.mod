@@ -1,6 +1,8 @@
 module net_utils
 
-go 1.24
+go 1.24.0
+
+toolchain go1.24.4
 
 require (
 	github.com/google/gopacket v1.1.19
