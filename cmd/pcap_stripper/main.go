@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -34,6 +35,7 @@ var (
 	position     string
 	verbose      bool
 	force        bool
+	preview      bool
 	showVersion  bool
 )
 
@@ -57,8 +59,8 @@ preserving the PCAP file structure and metadata while modifying only the packet 
   # Use auto-generated output filename with verbose output
   pcap_stripper -i input.pcap -b 14 -p beginning -v
 
-  # Force overwrite existing output file
-  pcap_stripper -i input.pcap -o output.pcap -b 14 -p beginning -f`,
+  # Preview the output after stripping
+  pcap_stripper -i input.pcap -b 14 -p beginning --preview`,
 		RunE: runStripper,
 	}
 
@@ -69,6 +71,7 @@ preserving the PCAP file structure and metadata while modifying only the packet 
 	rootCmd.Flags().StringVarP(&position, "position", "p", "beginning", "Position to strip from: 'beginning' or 'end'")
 	rootCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
 	rootCmd.Flags().BoolVarP(&force, "force", "f", false, "Force overwrite of existing output file")
+	rootCmd.Flags().BoolVar(&preview, "preview", false, "Preview first 5 packets of the output file")
 
 	// Mark required flags
 	rootCmd.MarkFlagRequired("input")
@@ -143,6 +146,42 @@ func runStripper(cmd *cobra.Command, args []string) error {
 			stats.SkippedTooSmall, bytesToStrip)
 	}
 
+	if preview {
+		fmt.Println("\nPreview of output file (first 20 bytes of first 5 packets):")
+		if err := previewOutput(outPath); err != nil {
+			fmt.Printf("Failed to preview output: %v\n", err)
+		}
+	}
+
+	return nil
+}
+
+func previewOutput(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	r, err := pcapgo.NewReader(f)
+	if err != nil {
+		return err
+	}
+
+	for i := 0; i < 5; i++ {
+		data, _, err := r.ReadPacketData()
+		if err != nil {
+			if err.Error() == "EOF" {
+				break
+			}
+			return err
+		}
+		limit := 20
+		if len(data) < 20 {
+			limit = len(data)
+		}
+		fmt.Printf("Packet %d: %s\n", i+1, hex.EncodeToString(data[:limit]))
+	}
 	return nil
 }
 
