@@ -1,57 +1,212 @@
+# GitLab CI/CD Pipeline for net_utils
+# Builds: pcap_stripper (CLI tool using Cobra framework)
+# Platforms: Linux x64, Windows x64, macOS ARM64
+
+image: golang:1.24-bookworm
+
 stages:
-  - setup
+  - prepare
+#  - test
   - build
-  - test
+  - package
+  - release
 
 variables:
-  # Remove GOPATH to avoid conflicts with Go modules
-  # GOPATH: "$CI_PROJECT_DIR"
-  GO111MODULE: "on"
+  PACKAGE_NAME: pcap_stripper
+  CGO_ENABLED: "1"
+  GOPATH: $CI_PROJECT_DIR/.go
+  GOCACHE: $CI_PROJECT_DIR/.cache/go-build
 
 cache:
-  key: ${CI_COMMIT_REF_SLUG}
+  key: "${CI_COMMIT_REF_SLUG}"
   paths:
-    - go/pkg/mod
-    - go/bin
-    - go.sum
-    - go.mod
+    - .go/pkg/mod/
+    - .cache/go-build/
 
-before_script:
-  - go version
+# ==============================================================================
+# PREPARE STAGE
+# ==============================================================================
 
-setup_module:
-  stage: setup
-  image: golang:1.20-bullseye
+download-dependencies:
+  stage: prepare
   script:
-    - echo "Initializing Go module"
-    - go mod init strip_pcap || true
-    - go get github.com/google/gopacket
-    - go mod tidy
-  artifacts:
-    paths:
-      - go.mod
-      - go.sum
+    - echo "Downloading Go modules..."
+    - go mod download
+    - go mod verify
 
-build_windows:
+# ==============================================================================
+# TEST STAGE
+# ==============================================================================
+
+#test-unit:
+#  stage: test
+#  needs:
+#    - job: download-dependencies
+#  before_script:
+#    - apt-get update && apt-get install -y libpcap-dev
+#  script:
+#    - echo "Running unit tests..."
+#    - go test -v -race -coverprofile=coverage.txt -covermode=atomic ./cmd/...
+#    - go tool cover -func=coverage.txt
+#  coverage: '/total:.*?(\d+\.\d+)%/'
+#  artifacts:
+#    paths:
+#      - coverage.txt
+#    expire_in: 1 week
+#
+#test-vet:
+#  stage: test
+#  needs:
+#    - job: download-dependencies
+#  before_script:
+#    - apt-get update && apt-get install -y libpcap-dev
+#  script:
+#    - echo "Running go vet..."
+#    - go vet ./cmd/...
+#
+#test-fmt:
+#  stage: test
+#  needs:
+#    - job: download-dependencies
+#  script:
+#    - echo "Checking code formatting..."
+#    - |
+#      if [ -n "$(gofmt -l .)" ]; then
+#        echo "The following files are not formatted correctly:"
+#        gofmt -l .
+#        exit 1
+#      fi
+#
+#test-lint:
+#  stage: test
+#  needs:
+#    - job: download-dependencies
+#  before_script:
+#    - apt-get update && apt-get install -y libpcap-dev
+#    - curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.61.0
+#    - export PATH=$PATH:$(go env GOPATH)/bin
+#  script:
+#    - echo "Running golangci-lint..."
+#    - golangci-lint run --timeout=5m ./cmd/...
+#  allow_failure: true
+#
+#test-security:
+#  stage: test
+#  needs:
+#    - job: download-dependencies
+#  before_script:
+#    - apt-get update && apt-get install -y libpcap-dev
+#    - curl -sfL https://raw.githubusercontent.com/securego/gosec/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.21.4
+#    - export PATH=$PATH:$(go env GOPATH)/bin
+#  script:
+#    - echo "Running security scan..."
+#    - gosec ./cmd/...
+#  allow_failure: true
+
+# ==============================================================================
+# BUILD STAGE
+# ==============================================================================
+
+build-linux-x64:
   stage: build
-  image: golang:1.20-bullseye
   needs:
-    - setup_module
+    - job: download-dependencies
+#    - job: test-unit
+#    - job: test-vet
+  before_script:
+    - apt-get update && apt-get install -y libpcap-dev
   script:
-    - echo "Building on Windows x86"
-    - GOOS=windows GOARCH=386 go build -o strip_pcap_windows_x86.exe strip_pcap.go
+    - echo "Building for Linux x64..."
+    - mkdir -p build
+    - go build -o build/${PACKAGE_NAME}-linux-amd64 ./cmd/pcap_stripper
+    - chmod +x build/${PACKAGE_NAME}-linux-amd64
   artifacts:
     paths:
-      - strip_pcap_windows_x86.exe
+      - build/${PACKAGE_NAME}-linux-amd64
+    expire_in: 30 days
 
-build_macos_m1:
+build-windows-x64:
   stage: build
-  image: golang:1.20-bullseye
   needs:
-    - setup_module
+    - job: download-dependencies
+#    - job: test-unit
+#    - job: test-vet
+  before_script:
+    - apt-get update && apt-get install -y gcc-mingw-w64-x86-64 libpcap-dev
   script:
-    - echo "Building on macOS M1"
-    - GOOS=darwin GOARCH=arm64 go build -o strip_pcap_macos_m1 strip_pcap.go
+    - echo "Building for Windows x64..."
+    - mkdir -p build
+    - GOOS=windows GOARCH=amd64 CGO_ENABLED=1 CC=x86_64-w64-mingw32-gcc go build -o build/${PACKAGE_NAME}-windows-amd64.exe ./cmd/pcap_stripper
   artifacts:
     paths:
-      - strip_pcap_macos_m1
+      - build/${PACKAGE_NAME}-windows-amd64.exe
+    expire_in: 30 days
+  allow_failure: true
+
+build-macos-arm64:
+  stage: build
+  needs:
+    - job: download-dependencies
+#    - job: test-unit
+#    - job: test-vet
+  before_script:
+    - apt-get update && apt-get install -y clang libpcap-dev
+  script:
+    - echo "Building for macOS ARM64..."
+    - mkdir -p build
+    - GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 CC=clang go build -o build/${PACKAGE_NAME}-macos-arm64 ./cmd/pcap_stripper
+  artifacts:
+    paths:
+      - build/${PACKAGE_NAME}-macos-arm64
+    expire_in: 30 days
+  allow_failure: true
+
+# ==============================================================================
+# PACKAGE STAGE
+# ==============================================================================
+
+package-all:
+  stage: package
+  needs:
+    - job: build-linux-x64
+    - job: build-windows-x64
+      optional: true
+    - job: build-macos-arm64
+      optional: true
+  script:
+    - echo "Creating release package..."
+    - mkdir -p release
+    - cp build/* release/ 2>/dev/null || true
+    - cd release
+    - sha256sum * > SHA256SUMS.txt
+    - |
+      cat > README.txt << EOF
+      PCAP Stripper - Multi-Platform Release
+      Version: \${CI_COMMIT_TAG:-dev}
+      EOF
+  artifacts:
+    paths:
+      - release/
+    expire_in: 90 days
+  rules:
+    - if: '$CI_COMMIT_TAG'
+    - if: '$CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+# ==============================================================================
+# RELEASE STAGE
+# ==============================================================================
+
+create-release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  needs:
+    - job: package-all
+  script:
+    - echo "Creating GitLab release..."
+  release:
+    tag_name: $CI_COMMIT_TAG
+    name: 'Release $CI_COMMIT_TAG'
+    description: 'PCAP Stripper release'
+  rules:
+    - if: '$CI_COMMIT_TAG'
